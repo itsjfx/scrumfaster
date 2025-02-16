@@ -113,8 +113,7 @@ options:
     * creates issues
     * if you specify `--project-id`, it will create items in a GitHub project linked back to the issues
     * and will set any additional fields on the project cards (e.g. `status`)
-    * i suggest not enabling any workflow automations to set status or automatically create items out of issues in your GitHub project
-    * as GitHub's project workflows will not create the items in correct order, but `scrumfaster` will
+    * i suggest not enabling any workflow automations to set status or create items out of issues, as project workflows will not create the items in correct order, but `scrumfaster` will
 * `import-drafts`
     * only creates draft items on a project
     * if you specify `--milestone-field KEY`, it will populate the field key with the current milestone for the ticket
@@ -152,11 +151,11 @@ options:
         * milestones are ignored as you cannot associate milestones to project items
         * however, you set `--milestone-field FIELD_NAME` to associate the milestone to a field
         * the field has to exist prior, and if you want to use a single select field the values must be pre-populated correctly
-3. if there are nested items, a create a card will be created for each leaf/lower item, and the name will be concatenated based on its parents
+3. if there are nested items, a card will be created for each leaf/lower item, and the name will be concatenated based on its parents
     * i may change this to create subtasks for issues
 4. cards can have fields, captured in brackets [] -- any keys referenced are case-insensitive
     * if it starts with @, then its assigning a list of people to a ticket
-        * e.g. [@itsjfx, somebodyelse, andsomeoneelse]
+        * e.g. `[@itsjfx, somebodyelse, andsomeoneelse]`
     * if its a number, then its shorthand syntax to set the value of a field named `points` (case insensitive)
         * if `points` does not exist on the project, this will crash
     * if there's an equals, then its setting the value of a field key directly
