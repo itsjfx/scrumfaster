@@ -55,7 +55,7 @@ running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REP
     * it will be under milestone "Sprint 1"
 4. it'll continue doing the above until it's complete or it crashes
 
-here's how it looks like in GitHub:
+A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/6>
 
 ### adding draft items
 
@@ -73,6 +73,8 @@ running with `scrumfaster --import-drafts -f example.md --project-id X --milesto
     * it will **NOT** be under a milestone as this is not supported for draft items
     * however, as `--milestone-field epic` was set, and `Epic` was pre-populated, it will set the milestone value under the `Epic` field
 3. it'll continue doing the above until it's complete or it crashes
+
+A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/5>
 
 ## usage
 
@@ -186,3 +188,6 @@ options:
 * support alternatively to `pandoc` (what are they)?
 * refactor into multiple files
 * pypi
+* implement sub tasks?
+* support auto making `Points`
+* support auto making `--milestone-field`
