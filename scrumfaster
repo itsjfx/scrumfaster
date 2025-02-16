@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+
+import sys
+import json
+import subprocess
+import os
+import re
+import logging
+import argparse
+from functools import cache
+
+import requests
+from bs4 import BeautifulSoup
+
+SESSION = requests.Session()
+
+def response_hook(request, *args, **kwargs):
+    try:
+        logging.debug(
+            'Making %s request to: %s with body: %r', request.request.method, request.request.url, request.request.body
+        )
+        request.raise_for_status()
+    except:
+        logging.error('Failed %s request to %s', request.request.method, request.request.url)
+        logging.error('%s', request.text)
+        raise
+
+SESSION.hooks = {'response': response_hook}
+
+
+## github utils
+
+def graphql(query, **variables):
+    url = 'https://api.github.com/graphql'
+    headers = {'authorization': 'token ' + get_token()}
+
+    res = SESSION.post(url, headers=headers, json=dict(query=query, variables=variables)).json()
+    if 'errors' in res and len(res['errors']):
+        raise ExceptionGroup(
+            'Received error(s) from GitHub GraphQL API', [Exception(err['message']) for err in res['errors']]
+        )
+    return res
+
+def rest(method, path, **kwargs):
+    headers = {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': 'Bearer ' + get_token(),
+        'X-GitHub-Api-Version': '2022-11-28',
+    }
+    return SESSION.request(method, 'https://api.github.com/' + path, headers=headers, **kwargs).json()
+
+def rest_repo(method, owner, repo, path, **kwargs):
+    return rest(method, f'repos/{owner}/{repo}/{path}', **kwargs)
+
+@cache
+def get_token():
+    return os.environ.get('GITHUB_TOKEN') or subprocess.check_output(['gh', 'auth', 'token'], text=True).rstrip('\n')
+
+
+## utils
+
+def pandoc(*args, **kwargs):
+    return subprocess.check_output(['pandoc', '--wrap=preserve', *args], text=True, **kwargs).rstrip('\n')
+
+def get_nested_labels(html, prefix=''):
+    label = html.find('label')
+    nested_tasks = html.find('ul', class_='task-list')
+    title = label.text.strip()
+    if prefix:
+        title = prefix + ': ' + title
+
+    if nested_tasks:
+        for task in nested_tasks.find_all('li', recursive=False):
+            yield from get_nested_labels(task, title)
+        return
+
+    yield html, title
+
+
+## github queries
+
+@cache
+def query_user(login):
+    query = """
+query ($login: String!) { user(login: $login) {
+        id
+    }
+}
+"""
+    return graphql(query, login=login)
+
+@cache
+def get_milestones(owner, repo):
+    milestones = rest_repo('GET', owner, repo, 'milestones')
+    data = {}
+    for milestone in milestones:
+        data[milestone['title'].lower()] = milestone
+    return data
+
+def create_milestone(owner, repo, title, **kwargs):
+    kwargs.setdefault('state', 'open')
+    data = {'title': title, **kwargs}
+    logging.info('Creating milestone: %s', title)
+    return rest_repo('POST', owner, repo, 'milestones', json=data)
+
+def create_issue(owner, repo, title, milestone_name=None, assignees=None, labels=None, **kwargs):
+    if milestone_name:
+        milestone_id = get_milestones(owner, repo)[milestone_name.lower()]['number']
+    else:
+        milestone_id = kwargs.get('milestone')
+    data = {
+        'title': title,
+        'milestone': milestone_id,  # TODO
+        'assignees': assignees or [],
+        'labels': labels or [],
+        **kwargs,
+    }
+    logging.info('Creating issue with title: %s', title)
+    return rest_repo('POST', owner, repo, 'issues', json=data)
+
+def add_issue_to_project(issue_id, project_id):
+    query = """
+mutation ($projectId: ID!, $contentId: ID!) {
+    addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+        item {
+            id
+        }
+    }
+}
+"""
+    return graphql(query, contentId=issue_id, projectId=project_id)
+
+def add_github_project_item(project_id, title, body=None, assignees=None):
+    query = """
+mutation ($projectId: ID!, $title: String!, $body: String!, $assigneeIds: [ID!]) {
+    addProjectV2DraftIssue(input: {projectId: $projectId, title: $title, body: $body, assigneeIds: $assigneeIds}) {
+        projectItem {
+            id
+        }
+    }
+}
+"""
+    assignees = assignees or []
+    assignees = [query_user(assignee)['data']['user']['id'] for assignee in assignees]
+    logging.info('Creating draft item with title: %s', title)
+    return graphql(query, projectId=project_id, title=title, body=body or '', assigneeIds=assignees)
+
+@cache
+def get_project_fields(project_id):
+    query = """
+query ($id: ID!) {
+  node(id: $id) {
+    ... on ProjectV2 {
+      fields(first: 20) {
+        nodes {
+          ... on ProjectV2Field {
+            __typename
+            id
+            name
+            dataType
+          }
+          ... on ProjectV2SingleSelectField {
+            __typename
+            id
+            name
+            dataType
+            options {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+    fields = graphql(query, id=project_id)
+    data = {}
+    for field in fields['data']['node']['fields']['nodes']:
+        if 'name' not in field:
+            continue
+        data[field['name'].lower()] = field
+    return data
+
+# https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects#updating-a-custom-text-number-or-date-field
+def update_field_value(project_id, item_id, key, value):
+    query = None
+    key = key.lower()
+    fields = get_project_fields(project_id)
+    field = fields[key]
+    if field['__typename'] == 'ProjectV2Field':
+        if field['dataType'] == 'NUMBER' and type(value) is int:
+            query = """
+mutation ($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: Float!) {
+    updateProjectV2ItemFieldValue(
+      input: {
+        projectId: $projectId
+        itemId: $itemId
+        fieldId: $fieldId
+        value: {
+          number: $value
+        }
+      }
+    ) {
+      projectV2Item {
+        id
+      }
+    }
+  }
+"""
+        else:
+            query = """
+mutation ($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+    updateProjectV2ItemFieldValue(
+      input: {
+        projectId: $projectId
+        itemId: $itemId
+        fieldId: $fieldId
+        value: {
+          text: $value
+        }
+      }
+    ) {
+      projectV2Item {
+        id
+      }
+    }
+  }
+"""
+    elif field['__typename'] == 'ProjectV2SingleSelectField':
+        value = value.lower()
+        for option in field['options']:
+            if option['name'].lower() == value:
+                value = option['id']
+                query = """
+mutation ($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+    updateProjectV2ItemFieldValue(
+      input: {
+        projectId: $projectId
+        itemId: $itemId
+        fieldId: $fieldId
+        value: {
+          singleSelectOptionId: $value
+        }
+      }
+    ) {
+      projectV2Item {
+        id
+      }
+    }
+  }
+"""
+                break
+    if not query:
+        raise Exception(f'Could not find field with key: {key} or value: {value}')
+    return graphql(query, projectId=project_id, itemId=item_id, fieldId=field['id'], value=value)
+
+
+## html stuff
+
+class Task:
+    FIELD_REGEX = r'\[([^]]+)\]'
+
+    def __init__(self, html, milestone, title):
+        self.html = html
+        self.milestone = milestone
+        self.fields = {}
+        self.parse_title(title)
+
+    def parse_title(self, title):
+        ARRAYS = ['assignees', 'labels']
+        for field in re.findall(self.FIELD_REGEX, title):
+            if field[0].startswith('@'):
+                self.fields['assignees'] = field[1:]
+
+            elif field.isdigit():
+                self.fields['points'] = int(field)
+
+            elif '=' in field:
+                key, _, value = field.partition('=')
+                if value.isdigit():
+                    value = int(value)
+                self.fields[key.strip().lower()] = value.strip()
+
+        for field in self.fields:
+            if field in ARRAYS:
+                self.fields[field] = [x.strip() for x in self.fields[field].split(',')]
+
+        self.title = re.sub(self.FIELD_REGEX, '', title).strip()
+
+    @property
+    @cache
+    def body(self):
+        # handle nesting
+        # dirty hack, use pandoc to convert back to markdown
+        # this is wasteful, but pretty fast
+        body = self.html.find(['ol', 'ul'])
+        if body:
+            lines = body.find_all('li')
+            if len(lines) == 1:
+                return lines[0].get_text()
+            else:
+                return pandoc('--from=html', '--to=gfm', input=str(body))
+        return ''
+
+    def to_dict(self):
+        return {'milestone': self.milestone, 'title': self.title, 'body': self.body, 'fields': self.fields}
+
+    def __repr__(self):
+        return str(json.dumps(self.to_dict()))
+
+@cache
+def get_headings(soup):
+    return soup.find_all('h2')
+
+def get_tasks_from_html(soup):
+    for h2 in get_headings(soup):
+        milestone = h2.text.strip()
+        # find the first task-list in the milestone
+        task_list = h2.find_next('ul', class_='task-list')
+        if task_list:
+            # go over each top level list item and get the tasks
+            for li in task_list.find_all('li', recursive=False):
+                for html, name in get_nested_labels(li):
+                    yield Task(html, milestone, name)
+
+def parse_input(file):
+    content = file.read().decode()
+    soup = BeautifulSoup(content, 'html.parser')
+    if soup.find():
+        return soup
+
+    content = pandoc('--from=gfm', '--to=html', input=content)
+    soup = BeautifulSoup(content, 'html.parser')
+    if not soup.find():
+        raise Exception('Invalid input received. Please give markdown or HTML')
+    return soup
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-f',
+        '--file',
+        default=sys.stdin.buffer,
+        type=argparse.FileType('rb'),
+        help='Markdown file or HTML file to parse (default: stdin)',
+    )
+    parser.add_argument(
+        '-l',
+        '--log',
+        choices=('debug', 'info', 'warning', 'error', 'critical'),
+        default='info',
+        help='Logging level (default: %(default)s)',
+    )
+
+    subparser = parser.add_subparsers(dest='cmd', required=False)
+
+    sub = subparser.add_parser('import-issues', help='')
+    sub.add_argument('--owner', help='', required=True)
+    sub.add_argument('--repo', help='', required=True)
+    sub.add_argument('--project-id')
+
+    sub = subparser.add_parser('import-drafts', help='')
+    sub.add_argument('--project-id', required=True)
+    sub.add_argument('--milestone-field', required=False)
+
+    args = parser.parse_args()
+    if not args.cmd:
+        parser.print_help()
+        return
+
+    logging.basicConfig(level=getattr(logging, args.log.upper()), format='%(levelname)s\t%(message)s')
+    soup = parse_input(args.file)
+
+    # make any milestones if they don't exist
+    if args.cmd == 'import-issues':
+        clear = False
+        for h2 in get_headings(soup):
+            milestone = h2.text.strip()
+            if milestone.lower() not in get_milestones(args.owner, args.repo):
+                # create with correct casing
+                create_milestone(args.owner, args.repo, milestone)
+                # TODO
+                # due_on=datetime.strptime('2024/10/10', '%Y/%m/%d').strftime('%Y-%m-%dT%H:%M:%SZ')
+                clear = True
+        if clear:
+            get_milestones.cache_clear()
+
+    for task in get_tasks_from_html(soup):
+        item_id = None
+        if args.cmd == 'import-issues':
+            issue = create_issue(
+                args.owner,
+                args.repo,
+                task.title,
+                body=task.body,
+                assignees=task.fields.get('assignees'),
+                milestone_name=task.milestone,
+                labels=task.fields.get('labels'),
+            )
+            if args.project_id:
+                item = add_issue_to_project(issue['node_id'], args.project_id)
+                item_id = item['data']['addProjectV2ItemById']['item']['id']
+
+        elif args.cmd == 'import-drafts':
+            item = add_github_project_item(args.project_id, task.title, task.body, task.fields.get('assignees') or [])
+            item_id = item['data']['addProjectV2DraftIssue']['projectItem']['id']
+            if args.milestone_field:
+                update_field_value(args.project_id, item_id, args.milestone_field, task.milestone)
+
+        if item_id:
+            for key, value in task.fields.items():
+                if key not in ('assignees', 'labels'):
+                    update_field_value(args.project_id, item_id, key, value)
+            if 'status' not in task.fields.keys():
+                update_field_value(args.project_id, item_id, 'status', 'Todo')
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

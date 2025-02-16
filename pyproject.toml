@@ -1,0 +1,10 @@
+[project]
+name = "scrumfaster"
+version = "0.1.0"
+description = "automates GitHub issues and projects"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4>=4.13.3",
+    "requests>=2.32.3",
+]
