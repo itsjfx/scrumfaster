@@ -48,7 +48,7 @@ running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REP
     * it will be assigned to `itsjfx`
     * it will have status `Done`
     * it will have the `database` label
-    * it will have `Points` of `1`
+    * it will have `Points` of `1` (`points` must exist prior)
     * it will have body:
         + Name the field `avatar` in the `users` table
         * Set value for existing users to https://...
@@ -66,7 +66,7 @@ running with `scrumfaster --import-drafts -f example.md --project-id X --milesto
     * it will be assigned to `itsjfx`
     * it will have status `Done`
     * it will **NOT** have the `database` label, as labels are not supported for draft items
-    * it will have `Points` of `1`
+    * it will have `Points` of `1` (`points` must exist prior)
     * it will have body:
         + Name the field `avatar` in the `users` table
         * Set value for existing users to https://...
@@ -153,17 +153,17 @@ options:
         * however, you set `--milestone-field FIELD_NAME` to associate the milestone to a field
         * the field has to exist prior, and if you want to use a single select field the values must be pre-populated correctly
 3. if there are nested items, a create a card will be created for each leaf/lower item, and the name will be concatenated based on its parents
-    a. i may change this to create subtasks for issues
+    * i may change this to create subtasks for issues
 4. cards can have fields, captured in brackets [] -- any keys referenced are case-insensitive
-    a. if it starts with @, then its assigning a list of people to a ticket
+    * if it starts with @, then its assigning a list of people to a ticket
         * e.g. [@itsjfx, somebodyelse, andsomeoneelse]
-    b. if its a number, then its shorthand syntax to set the value of a field named `points` (case insensitive)
+    * if its a number, then its shorthand syntax to set the value of a field named `points` (case insensitive)
         * if `points` does not exist on the project, this will crash
-    c. if there's an equals, then its setting the value of a field key directly
+    * if there's an equals, then its setting the value of a field key directly
         * e.g. `status=Done` will set the value of a field named `status` to `Done`
         * or `labels=frontend, backend` will assign `frontend` and `backend` labels on the ticket
-    d. if its a single select field, the value will be looked up, if its an invalid option the program will crash
-    e. theres no way to escape these brackets at the moment
+    * if its a single select field, the value will be looked up, if its an invalid option the program will crash
+    * theres no way to escape these brackets at the moment
 5. if a task item has a nested unordered list (* or -) or an ordered list (1.), it will be used in the body of the card
     * if the list contains a single item, it will be used as the body directly (no list or list item will be displayed)
     * otherwise, the body will be the unordered list or ordered list
