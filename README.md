@@ -1,8 +1,7 @@
 # scrumfaster
 
-the real scrum master
-
-automates GitHub issues and projects
+* the real scrum master
+* automates GitHub issues and projects
 
 ## what does this do
 
@@ -10,10 +9,6 @@ automates GitHub issues and projects
 * as you're using a markdown editor, you can rearrange, duplicate, or remove cards quickly with your familiar key bindings
 * you will have more productive planning sessions as you'll spend less time clicking on text boxes
 * and moving between cards if you decide to break down work further or change something
-
-* things are still rough and bound to change
-* the code is in a single ~400 LOC file which is bigger than I'd like (thanks GraphQL) so I'll probably need to refactor it
-* why is it slow? cause of all the API calls you need to make to create stuff and set properties on them
 
 ## example
 
@@ -42,6 +37,8 @@ for the following markdown:
 * [ ] Delete jeff from database [labels=database] [1]
 ```
 
+the example is [provided in the repository](./example.md) if you'd like to run `scrumfaster` against it
+
 ### adding issues
 
 running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REPO --project-id X`:
@@ -58,8 +55,6 @@ running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REP
         * Set value for existing users to https://...
     * it will be under milestone "Sprint 1"
 4. it'll continue doing the above until it's complete or it crashes
-
-the example is [provided in the repository](./example.md)
 
 here's how it looks like in GitHub:
 
@@ -125,6 +120,23 @@ options:
     * only creates draft items on a project
     * if you specify `--milestone-field KEY`, it will populate the field key with the current milestone for the ticket
 
+## when to use issues or drafts?
+
+* draft items are great if you don't want to flood your project with issues
+* in open-source projects, people unfortunately correlate issues == problems, even if issues are created by maintainers for tracking feature development
+* drafts are also simpler, if you have a project with 1 - 2 people, it may be sufficient
+* however, issues are much more powerful. if you want to scale, i suggest creating issues
+* with issues you can:
+    + assign labels
+    + reference issues in other issues
+    + reference issues in your commit messages or PRs, and everything is tracked within the issue
+        * this is the most useful feature due to the audit trail
+        * e.g. referencing a ticket in your commit message `#1` will add it to the issues log
+        * you can also close issues by including `implements #1` in your commit message, it will mark as completed and link to your commit
+        * <https://github.blog/news-insights/product-news/closing-issues-via-commit-messages>
+    + use milestones
+    + maintain history, closed issues are always visible
+* there's probably more things, i've only recently began using issues
 
 ## rules
 
@@ -132,7 +144,7 @@ options:
     * to create only issues: `import-issues --owner OWNER --repo REPO`
     * issues and project items: `import-issues --owner OWNER --repo REPO --project-id X`
     * only draft items: `import-drafts --project-id`
-2. each <h2> or ## heading is a "milestone" or "milestone field"
+2. each `<h2>` or ## heading is a "milestone" or "milestone field"
     * when creating issues
         + if a milestone does not exist, it will be created
         + this value has case insensitive lookups (so a milestone named "Sprint 1" and "sprint 1" are equivalent)
