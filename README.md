@@ -1,7 +1,6 @@
 # scrumfaster
 
 * the real scrum master
-* automates GitHub issues and projects
 
 ## what does this do
 
