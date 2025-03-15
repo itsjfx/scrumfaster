@@ -1,6 +1,6 @@
 # scrumfaster
 
-the __real__ scrum master
+the _real_ scrum master
 
 ## what does this do
 
