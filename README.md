@@ -1,13 +1,15 @@
 # scrumfaster
 
-* the real scrum master
+the __real__ scrum master
 
 ## what does this do
 
 * `scrumfaster` takes a markdown or HTML input, parses it based on some made up rules, and creates GitHub project draft items or issues
 * as you're using a markdown editor, you can rearrange, duplicate, or remove cards quickly with your familiar key bindings
 * you will have more productive planning sessions as you'll spend less time clicking on text boxes
-* and moving between cards if you decide to break down work further or change something
+* refactoring or breaking down cards is much easier, just hop between the lines in your editor and cut and paste
+
+i have [a blog post featuring this project](https://jfx.ac/blog/engineering-project-management) which goes a bit more into the philosophy
 
 ## example
 
@@ -36,45 +38,25 @@ for the following markdown:
 * [ ] Delete jeff from database [labels=database] [1]
 ```
 
-the example is [provided in the repository](./example.md) if you'd like to run `scrumfaster` against it
+when run with `scrumfaster --import-issues`, the following board will be generated:
+![image](https://github.com/user-attachments/assets/45192628-4f59-461c-9f96-01bf374b3063)
 
-### adding issues
+example boards are also publicly available here:
+* [example board using `import-issues`](https://github.com/users/itsjfx/projects/6)
+* [example board using `import-drafts`](https://github.com/users/itsjfx/projects/5)
 
-running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REPO --project-id X`:
+the example markdown is [provided in the repository](./example.md) if you'd like to run `scrumfaster` against it
 
-1. `# my cool board` will be ignored (this is not supported at the moment)
-2. a milestone named "Sprint 1" will be created if it does not exist
-3. a card named "Profile avatars: create database migration for avatar field" will be created
-    * it will be assigned to `itsjfx`
-    * it will have status `Done`
-    * it will have the `database` label
-    * it will have `Points` of `1` (`points` must exist prior)
-    * it will have body:
-        + Name the field `avatar` in the `users` table
-        * Set value for existing users to https://...
-    * it will be under milestone "Sprint 1"
-4. it'll continue doing the above until it's complete or it crashes
+## getting started
 
-A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/6>
+1. install the wonderful [pandoc](https://pandoc.org) on your machine and have it available in your `PATH`
+    * `pandoc` is used to convert to and from markdown and HTML
+1. clone the repo
+2. set `GITHUB_TOKEN` or make sure you're authenticated to the `gh` cli
+    * you may need to allow some additional scopes for projects or issues
 
-### adding draft items
-
-running with `scrumfaster --import-drafts -f example.md --project-id X --milestone-field epic`:
-
-1. `# my cool board` will be ignored (this is not supported at the moment)
-2. a card named "Profile avatars: create database migration for avatar field" will be created
-    * it will be assigned to `itsjfx`
-    * it will have status `Done`
-    * it will **NOT** have the `database` label, as labels are not supported for draft items
-    * it will have `Points` of `1` (`points` must exist prior)
-    * it will have body:
-        + Name the field `avatar` in the `users` table
-        * Set value for existing users to https://...
-    * it will **NOT** be under a milestone as this is not supported for draft items
-    * however, as `--milestone-field epic` was set, and `Epic` was pre-populated, it will set the milestone value under the `Epic` field
-3. it'll continue doing the above until it's complete or it crashes
-
-A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/5>
+3. use `uv` or `pip` to install dependencies needed
+4. run `scrumfaster`, example usage below
 
 ## usage
 
@@ -120,25 +102,47 @@ options:
     * only creates draft items on a project
     * if you specify `--milestone-field KEY`, it will populate the field key with the current milestone for the ticket
 
-## when to use issues or drafts?
+## what's it doing?
 
-* draft items are great if you don't want to flood your project with issues
-* in open-source projects, people unfortunately correlate issues == problems, even if issues are created by maintainers for tracking feature development
-* drafts are also simpler, if you have a project with 1 - 2 people, it may be sufficient
-* however, issues are much more powerful. if you want to scale, i suggest creating issues
-* with issues you can:
-    + assign labels
-    + reference issues in other issues
-    + reference issues in your commit messages or PRs, and everything is tracked within the issue
-        * this is the most useful feature due to the audit trail
-        * e.g. referencing a ticket in your commit message `#1` will add it to the issues log
-        * you can also close issues by including `implements #1` in your commit message, it will mark as completed and link to your commit
-        * <https://github.blog/news-insights/product-news/closing-issues-via-commit-messages>
-    + use milestones
-    + maintain history, closed issues are always visible
-* there's probably more things, i've only recently began using issues
+### when adding issues
 
-## rules
+running with `scrumfaster --import-issues -f example.md --owner=OWNER --repo=REPO --project-id X`:
+
+1. `# my cool board` will be ignored (this is not supported at the moment)
+2. a milestone named "Sprint 1" will be created if it does not exist
+3. a card named "Profile avatars: create database migration for avatar field" will be created
+    * it will be assigned to `itsjfx`
+    * it will have status `Done`
+    * it will have the `database` label
+    * it will have `Points` of `1` (`points` must exist prior)
+    * it will have body:
+        + Name the field `avatar` in the `users` table
+        * Set value for existing users to https://...
+    * it will be under milestone "Sprint 1"
+4. it'll continue doing the above until it's complete or it crashes
+
+A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/6>
+
+### when adding draft items
+
+running with `scrumfaster --import-drafts -f example.md --project-id X --milestone-field epic`:
+
+1. `# my cool board` will be ignored (this is not supported at the moment)
+2. a card named "Profile avatars: create database migration for avatar field" will be created
+    * it will be assigned to `itsjfx`
+    * it will have status `Done`
+    * it will **NOT** have the `database` label, as labels are not supported for draft items
+    * it will have `Points` of `1` (`points` must exist prior)
+    * it will have body:
+        + Name the field `avatar` in the `users` table
+        * Set value for existing users to https://...
+    * it will **NOT** be under a milestone as this is not supported for draft items
+    * however, as `--milestone-field epic` was set, and `Epic` was pre-populated, it will set the milestone value under the `Epic` field
+3. it'll continue doing the above until it's complete or it crashes
+
+A real example of a generated board is available here: <https://github.com/users/itsjfx/projects/5>
+
+### rules
 
 1. you can create issues, issues AND project items, or draft items
     * to create only issues: `import-issues --owner OWNER --repo REPO`
@@ -170,15 +174,23 @@ options:
     * otherwise, the body will be the unordered list or ordered list
 6. project items will default to `Todo`, unless overridden by setting `status=X`
 
-## authentication
+## when to use issues or drafts?
 
-* To authenticate with GitHub you can set the `GITHUB_TOKEN` environment variable, or it will attempt your credentials from the `gh` CLI
-* you may need to allow some additional scopes for projects or issues
-
-## dependencies
-
-* python: ideally use `uv` or the [requirements.txt](./requirements.txt)
-* and you need the wonderful [pandoc](https://pandoc.org) somewhere on your path to convert to/and from markdown
+* draft items are great if you don't want to flood your project with issues
+* in open-source projects, people unfortunately correlate issues == problems, even if issues are created by maintainers for tracking feature development
+* drafts are also simpler, if you have a project with 1 - 2 people, it may be sufficient
+* however, issues are much more powerful. if you want to scale, i suggest creating issues
+* with issues you can:
+    + assign labels
+    + reference issues in other issues
+    + reference issues in your commit messages or PRs, and everything is tracked within the issue
+        * this is the most useful feature due to the audit trail
+        * e.g. referencing a ticket in your commit message `#1` will add it to the issues log
+        * you can also close issues by including `implements #1` in your commit message, it will mark as completed and link to your commit
+        * <https://github.blog/news-insights/product-news/closing-issues-via-commit-messages>
+    + use milestones
+    + maintain history, closed issues are always visible
+* there's probably more things, i've only recently began using issues
 
 ## TODO
 
